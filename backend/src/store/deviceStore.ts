@@ -8,11 +8,11 @@ interface BuildingInfo {
 }
 
 const BUILDINGS: BuildingInfo[] = [
-  { id: 'BLD-01', name: 'North Tower', lat: 50.1109, lng: 8.6821 },
-  { id: 'BLD-02', name: 'Innovation Hub', lat: 50.1145, lng: 8.6872 },
-  { id: 'BLD-03', name: 'Logistics Center', lat: 50.1080, lng: 8.6750 },
-  { id: 'BLD-04', name: 'Data Facility', lat: 50.1190, lng: 8.6920 },
-  { id: 'BLD-05', name: 'East Pavilion', lat: 50.1130, lng: 8.6990 },
+  { id: 'BLD-01', name: 'Milad Complex', lat: 35.7448, lng: 51.3753 },
+  { id: 'BLD-02', name: 'Pardis Tech Park', lat: 35.7380, lng: 51.4120 },
+  { id: 'BLD-03', name: 'Azadi Innovation Station', lat: 35.7088, lng: 51.3204 },
+  { id: 'BLD-04', name: 'Sharif Tech Campus', lat: 35.7026, lng: 51.3524 },
+  { id: 'BLD-05', name: 'Saadat Abad Hub', lat: 35.7820, lng: 51.3700 },
 ];
 
 export class DeviceStore {

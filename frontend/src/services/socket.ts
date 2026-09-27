@@ -4,10 +4,10 @@ import { useDeviceStore } from '../store/useDeviceStore.js';
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
 let updateQueue: DeviceEventPayload[] = [];
-let batchScheduled = false;
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
 
 function flushDeviceUpdates() {
-  batchScheduled = false;
+  batchTimer = null;
   if (updateQueue.length === 0) return;
   const batch = updateQueue;
   updateQueue = [];
@@ -16,13 +16,8 @@ function flushDeviceUpdates() {
 
 function queueDeviceUpdate(payload: DeviceEventPayload) {
   updateQueue.push(payload);
-  if (!batchScheduled) {
-    batchScheduled = true;
-    if (typeof requestAnimationFrame !== 'undefined') {
-      requestAnimationFrame(flushDeviceUpdates);
-    } else {
-      setTimeout(flushDeviceUpdates, 16);
-    }
+  if (!batchTimer) {
+    batchTimer = setTimeout(flushDeviceUpdates, 250);
   }
 }
 

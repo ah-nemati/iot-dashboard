@@ -7,14 +7,113 @@ interface DeviceTableProps {
   onSelectDevice: (deviceId: string) => void;
 }
 
+const renderPriorityBadge = (priority: DevicePriority, urgentAlarm: boolean) => {
+  if (urgentAlarm || priority === 'urgent') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+        <ShieldAlert className="w-3 h-3" />
+        Urgent
+      </span>
+    );
+  }
+  if (priority === 'warning') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+        Warning
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/60 text-slate-300">
+      Normal
+    </span>
+  );
+};
+
+interface DeviceTableRowProps {
+  dev: Device;
+  onSelect: (id: string) => void;
+}
+
+const DeviceTableRow = React.memo<DeviceTableRowProps>(
+  ({ dev, onSelect }) => {
+    const isUrgent = dev.urgentAlarm || dev.priority === 'urgent';
+
+    return (
+      <tr
+        data-testid={`device-row-${dev.id}`}
+        className={`hover:bg-slate-700/30 transition-colors ${
+          isUrgent ? 'bg-rose-950/20 border-l-4 border-l-rose-500' : ''
+        }`}
+      >
+        <td className="py-3 px-4">
+          <span className="flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                dev.status === 'online' ? 'bg-emerald-400' : 'bg-slate-500'
+              }`}
+            />
+            <span className={dev.status === 'online' ? 'text-emerald-400' : 'text-slate-400'}>
+              {dev.status}
+            </span>
+          </span>
+        </td>
+        <td className="py-3 px-4 font-medium text-slate-200">
+          <div>{dev.name}</div>
+          <div className="text-[11px] font-mono text-slate-400">{dev.id}</div>
+        </td>
+        <td className="py-3 px-4 text-slate-300">{dev.buildingName}</td>
+        <td className="py-3 px-4">{renderPriorityBadge(dev.priority, dev.urgentAlarm)}</td>
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            <Battery className={`w-3.5 h-3.5 ${dev.battery < 20 ? 'text-rose-400' : 'text-slate-400'}`} />
+            <span className={dev.battery < 20 ? 'text-rose-400 font-semibold' : 'text-slate-300'}>
+              {dev.battery}%
+            </span>
+          </div>
+        </td>
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            <Wifi className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-300">{dev.signalStrength}%</span>
+          </div>
+        </td>
+        <td className="py-3 px-4 text-slate-400">
+          {new Date(dev.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </td>
+        <td className="py-3 px-4 text-right">
+          <button
+            onClick={() => onSelect(dev.id)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition-colors"
+          >
+            <Eye className="w-3 h-3 text-slate-400" />
+            <span>Details</span>
+          </button>
+        </td>
+      </tr>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.dev.version === next.dev.version &&
+      prev.dev.status === next.dev.status &&
+      prev.dev.priority === next.dev.priority &&
+      prev.dev.urgentAlarm === next.dev.urgentAlarm &&
+      prev.dev.battery === next.dev.battery &&
+      prev.dev.signalStrength === next.dev.signalStrength &&
+      prev.dev.lastSeen === next.dev.lastSeen
+    );
+  }
+);
+
 export const DeviceTable: React.FC<DeviceTableProps> = ({ onSelectDevice }) => {
   const devices = useDeviceStore((state) => state.devices);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | DeviceStatus>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | DevicePriority>('all');
-  const [sortBy, setSortBy] = useState<'lastSeen' | 'id' | 'battery' | 'signalStrength'>('lastSeen');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<'lastSeen' | 'id' | 'battery' | 'signalStrength'>('id');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
 
@@ -47,31 +146,8 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ onSelectDevice }) => {
       setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortBy(field);
-      setSortOrder('desc');
+      setSortOrder(field === 'id' ? 'asc' : 'desc');
     }
-  };
-
-  const renderPriorityBadge = (priority: DevicePriority, urgentAlarm: boolean) => {
-    if (urgentAlarm || priority === 'urgent') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
-          <ShieldAlert className="w-3 h-3" />
-          Urgent
-        </span>
-      );
-    }
-    if (priority === 'warning') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-          Warning
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/60 text-slate-300">
-        Normal
-      </span>
-    );
   };
 
   return (
@@ -175,63 +251,13 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ onSelectDevice }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700/40">
-            {paginatedDevices.map((dev) => {
-              const isUrgent = dev.urgentAlarm || dev.priority === 'urgent';
-              return (
-                <tr
-                  key={dev.id}
-                  data-testid={`device-row-${dev.id}`}
-                  className={`hover:bg-slate-700/30 transition-colors ${
-                    isUrgent ? 'bg-rose-950/20 border-l-4 border-l-rose-500' : ''
-                  }`}
-                >
-                  <td className="py-3 px-4">
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          dev.status === 'online' ? 'bg-emerald-400' : 'bg-slate-500'
-                        }`}
-                      />
-                      <span className={dev.status === 'online' ? 'text-emerald-400' : 'text-slate-400'}>
-                        {dev.status}
-                      </span>
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-medium text-slate-200">
-                    <div>{dev.name}</div>
-                    <div className="text-[11px] font-mono text-slate-400">{dev.id}</div>
-                  </td>
-                  <td className="py-3 px-4 text-slate-300">{dev.buildingName}</td>
-                  <td className="py-3 px-4">{renderPriorityBadge(dev.priority, dev.urgentAlarm)}</td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <Battery className={`w-3.5 h-3.5 ${dev.battery < 20 ? 'text-rose-400' : 'text-slate-400'}`} />
-                      <span className={dev.battery < 20 ? 'text-rose-400 font-semibold' : 'text-slate-300'}>
-                        {dev.battery}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <Wifi className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-slate-300">{dev.signalStrength}%</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-slate-400">
-                    {new Date(dev.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => onSelectDevice(dev.id)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition-colors"
-                    >
-                      <Eye className="w-3 h-3 text-slate-400" />
-                      <span>Details</span>
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {paginatedDevices.map((dev) => (
+              <DeviceTableRow
+                key={dev.id}
+                dev={dev}
+                onSelect={onSelectDevice}
+              />
+            ))}
             {paginatedDevices.length === 0 && (
               <tr>
                 <td colSpan={8} className="py-8 text-center text-slate-500">

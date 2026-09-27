@@ -26,7 +26,8 @@ export class SimulationEngine {
     this.isRunning = true;
 
     for (const device of this.store.getAll()) {
-      this.scheduleDeviceTick(device.id);
+      const initialDelay = Math.floor(Math.random() * 4000);
+      this.scheduleDeviceTick(device.id, initialDelay);
     }
   }
 
@@ -38,10 +39,10 @@ export class SimulationEngine {
     this.timers.clear();
   }
 
-  private scheduleDeviceTick(deviceId: string): void {
+  private scheduleDeviceTick(deviceId: string, delayOverride?: number): void {
     if (!this.isRunning) return;
 
-    const delayMs = 1000 + Math.floor(Math.random() * 2000);
+    const delayMs = delayOverride !== undefined ? delayOverride : 3000 + Math.floor(Math.random() * 4000);
     const timer = setTimeout(() => {
       this.tickDevice(deviceId);
       this.scheduleDeviceTick(deviceId);
