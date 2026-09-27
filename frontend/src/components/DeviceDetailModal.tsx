@@ -28,9 +28,11 @@ interface DeviceDetailModalProps {
   onClose: () => void;
 }
 
+const EMPTY_HISTORY: any[] = [];
+
 export const DeviceDetailModal: React.FC<DeviceDetailModalProps> = ({ deviceId, onClose }) => {
   const device = useDeviceStore((state) => state.devices[deviceId]);
-  const history = useDeviceStore((state) => state.telemetryHistory[deviceId] || []);
+  const history = useDeviceStore((state) => state.telemetryHistory[deviceId] ?? EMPTY_HISTORY);
   const [triggerLoading, setTriggerLoading] = useState(false);
 
   if (!device) return null;

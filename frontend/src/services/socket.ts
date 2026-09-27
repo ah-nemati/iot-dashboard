@@ -1,8 +1,30 @@
 import { io, Socket } from 'socket.io-client';
-import { ClientToServerEvents, ServerToClientEvents } from '../shared/types.js';
+import { ClientToServerEvents, ServerToClientEvents, DeviceEventPayload } from '../shared/types.js';
 import { useDeviceStore } from '../store/useDeviceStore.js';
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
+let updateQueue: DeviceEventPayload[] = [];
+let batchScheduled = false;
+
+function flushDeviceUpdates() {
+  batchScheduled = false;
+  if (updateQueue.length === 0) return;
+  const batch = updateQueue;
+  updateQueue = [];
+  useDeviceStore.getState().batchUpdateDevices(batch);
+}
+
+function queueDeviceUpdate(payload: DeviceEventPayload) {
+  updateQueue.push(payload);
+  if (!batchScheduled) {
+    batchScheduled = true;
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(flushDeviceUpdates);
+    } else {
+      setTimeout(flushDeviceUpdates, 16);
+    }
+  }
+}
 
 export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
   if (!socket) {
@@ -31,7 +53,7 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
     });
 
     socket.on('device:updated', (payload) => {
-      store().updateDevice(payload);
+      queueDeviceUpdate(payload);
     });
 
     socket.on('device:disconnected', (payload) => {

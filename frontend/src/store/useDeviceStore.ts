@@ -13,12 +13,14 @@ export type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
 export interface DeviceStoreState {
   devices: Record<string, Device>;
   alerts: Alert[];
+  summary: DashboardSummary;
   telemetryHistory: Record<string, TelemetryPoint[]>;
   connectionStatus: ConnectionStatus;
   selectedDeviceId: string | null;
 
   setDevices: (devices: Device[]) => void;
   updateDevice: (payload: DeviceEventPayload | Device) => void;
+  batchUpdateDevices: (payloads: (DeviceEventPayload | Device)[]) => void;
   setDeviceDisconnected: (payload: { id: string; version: number; timestamp: string }) => void;
   setDeviceConnected: (payload: { id: string; version: number; timestamp: string }) => void;
   addAlert: (alert: Alert) => void;
@@ -31,9 +33,48 @@ export interface DeviceStoreState {
 
 const MAX_HISTORY_POINTS = 50;
 
+function computeSummary(devices: Record<string, Device>): DashboardSummary {
+  let online = 0;
+  let offline = 0;
+  let urgentAlarms = 0;
+  let technicalFaults = 0;
+
+  const list = Object.values(devices);
+  for (const dev of list) {
+    if (dev.status === 'online') {
+      online++;
+    } else {
+      offline++;
+    }
+    if (dev.urgentAlarm || dev.priority === 'urgent') {
+      urgentAlarms++;
+    }
+    if (dev.hasFaults) {
+      technicalFaults++;
+    }
+  }
+
+  return {
+    total: list.length,
+    online,
+    offline,
+    urgentAlarms,
+    technicalFaults,
+  };
+}
+
+const INITIAL_SUMMARY: DashboardSummary = {
+  total: 0,
+  online: 0,
+  offline: 0,
+  urgentAlarms: 0,
+  technicalFaults: 0,
+};
+
 export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
   devices: {},
   alerts: [],
+  summary: INITIAL_SUMMARY,
   telemetryHistory: {},
   connectionStatus: 'disconnected',
   selectedDeviceId: null,
@@ -56,36 +97,65 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
       }
     }
 
-    set({ devices: deviceMap, telemetryHistory: historyMap });
+    set({
+      devices: deviceMap,
+      telemetryHistory: historyMap,
+      summary: computeSummary(deviceMap),
+    });
+  },
+
+  batchUpdateDevices: (payloads: (DeviceEventPayload | Device)[]) => {
+    set((state) => {
+      let hasChanges = false;
+      let summaryChanged = false;
+      const nextDevices = { ...state.devices };
+      const nextHistory = { ...state.telemetryHistory };
+
+      for (const payload of payloads) {
+        const incoming: Device = 'device' in payload ? payload.device : payload;
+        const current = nextDevices[incoming.id];
+
+        if (current && incoming.version <= current.version) {
+          continue;
+        }
+
+        if (
+          !current ||
+          current.status !== incoming.status ||
+          current.priority !== incoming.priority ||
+          current.urgentAlarm !== incoming.urgentAlarm ||
+          current.hasFaults !== incoming.hasFaults
+        ) {
+          summaryChanged = true;
+        }
+
+        hasChanges = true;
+        nextDevices[incoming.id] = incoming;
+
+        const currentHist = nextHistory[incoming.id] || [];
+        const newPoint: TelemetryPoint = {
+          timestamp: incoming.lastSeen,
+          battery: incoming.battery,
+          temperature: incoming.temperature,
+          signalStrength: incoming.signalStrength,
+        };
+        nextHistory[incoming.id] = [...currentHist.slice(-(MAX_HISTORY_POINTS - 1)), newPoint];
+      }
+
+      if (!hasChanges) {
+        return state;
+      }
+
+      return {
+        devices: nextDevices,
+        telemetryHistory: nextHistory,
+        summary: summaryChanged ? computeSummary(nextDevices) : state.summary,
+      };
+    });
   },
 
   updateDevice: (payload: DeviceEventPayload | Device) => {
-    const incoming: Device = 'device' in payload ? payload.device : payload;
-    const current = get().devices[incoming.id];
-
-    if (current && incoming.version <= current.version) {
-      return;
-    }
-
-    const currentHistory = get().telemetryHistory[incoming.id] || [];
-    const newPoint: TelemetryPoint = {
-      timestamp: incoming.lastSeen,
-      battery: incoming.battery,
-      temperature: incoming.temperature,
-      signalStrength: incoming.signalStrength,
-    };
-    const nextHistory = [...currentHistory.slice(-(MAX_HISTORY_POINTS - 1)), newPoint];
-
-    set((state) => ({
-      devices: {
-        ...state.devices,
-        [incoming.id]: incoming,
-      },
-      telemetryHistory: {
-        ...state.telemetryHistory,
-        [incoming.id]: nextHistory,
-      },
-    }));
+    get().batchUpdateDevices([payload]);
   },
 
   setDeviceDisconnected: ({ id, version, timestamp }) => {
@@ -94,17 +164,22 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
       return;
     }
 
-    set((state) => ({
-      devices: {
+    set((state) => {
+      const updatedDevice: Device = {
+        ...current,
+        status: 'offline',
+        version,
+        lastSeen: timestamp,
+      };
+      const nextDevices = {
         ...state.devices,
-        [id]: {
-          ...current,
-          status: 'offline',
-          version,
-          lastSeen: timestamp,
-        },
-      },
-    }));
+        [id]: updatedDevice,
+      };
+      return {
+        devices: nextDevices,
+        summary: computeSummary(nextDevices),
+      };
+    });
   },
 
   setDeviceConnected: ({ id, version, timestamp }) => {
@@ -113,17 +188,22 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
       return;
     }
 
-    set((state) => ({
-      devices: {
+    set((state) => {
+      const updatedDevice: Device = {
+        ...current,
+        status: 'online',
+        version,
+        lastSeen: timestamp,
+      };
+      const nextDevices = {
         ...state.devices,
-        [id]: {
-          ...current,
-          status: 'online',
-          version,
-          lastSeen: timestamp,
-        },
-      },
-    }));
+        [id]: updatedDevice,
+      };
+      return {
+        devices: nextDevices,
+        summary: computeSummary(nextDevices),
+      };
+    });
   },
 
   addAlert: (alert: Alert) => {
@@ -144,6 +224,7 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
       return {
         alerts: [alert, ...state.alerts.filter((a) => a.id !== alert.id)],
         devices: updatedDevices,
+        summary: computeSummary(updatedDevices),
       };
     });
   },
@@ -177,6 +258,7 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
       return {
         alerts: nextAlerts,
         devices: updatedDevices,
+        summary: computeSummary(updatedDevices),
       };
     });
   },
@@ -207,12 +289,17 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
             merged[dev.id] = dev;
           }
         }
-        set({ devices: merged });
-      }
 
-      if (alertRes.ok) {
-        const alerts: Alert[] = await alertRes.json();
-        set({ alerts });
+        let alertsData: Alert[] = get().alerts;
+        if (alertRes && alertRes.ok) {
+          alertsData = await alertRes.json();
+        }
+
+        set({
+          devices: merged,
+          alerts: alertsData,
+          summary: computeSummary(merged),
+        });
       }
     } catch {
       // offline or unreachable
@@ -223,6 +310,7 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
     set({
       devices: {},
       alerts: [],
+      summary: INITIAL_SUMMARY,
       telemetryHistory: {},
       connectionStatus: 'disconnected',
       selectedDeviceId: null,
@@ -231,33 +319,7 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => ({
 }));
 
 export function selectSummary(state: DeviceStoreState): DashboardSummary {
-  let online = 0;
-  let offline = 0;
-  let urgentAlarms = 0;
-  let technicalFaults = 0;
-
-  const devices = Object.values(state.devices);
-  for (const dev of devices) {
-    if (dev.status === 'online') {
-      online++;
-    } else {
-      offline++;
-    }
-    if (dev.urgentAlarm || dev.priority === 'urgent') {
-      urgentAlarms++;
-    }
-    if (dev.hasFaults) {
-      technicalFaults++;
-    }
-  }
-
-  return {
-    total: devices.length,
-    online,
-    offline,
-    urgentAlarms,
-    technicalFaults,
-  };
+  return state.summary;
 }
 
 export interface FilterOptions {
