@@ -7,7 +7,7 @@ import { DeviceTable } from './components/DeviceTable.js';
 import { DeviceDetailModal } from './components/DeviceDetailModal.js';
 import { AlertDrawer } from './components/AlertDrawer.js';
 import { DeviceMap } from './components/DeviceMap.js';
-import { LayoutGrid, MapPin } from 'lucide-react';
+import { LayoutGrid, MapPin, Flame } from 'lucide-react';
 
 export const App: React.FC = () => {
   const alerts = useDeviceStore((state) => state.alerts);
@@ -16,6 +16,7 @@ export const App: React.FC = () => {
 
   const [isAlertDrawerOpen, setIsAlertDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'table' | 'map'>('table');
+  const [dismissedAlertId, setDismissedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
     connectSocket();
@@ -25,6 +26,8 @@ export const App: React.FC = () => {
   }, []);
 
   const activeAlertCount = alerts.filter((a) => !a.resolvedAt).length;
+  const latestUrgentAlert = alerts.find((a) => !a.resolvedAt && a.priority === 'urgent');
+  const showToast = latestUrgentAlert && latestUrgentAlert.id !== dismissedAlertId;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -82,6 +85,38 @@ export const App: React.FC = () => {
         onClose={() => setIsAlertDrawerOpen(false)}
         onSelectDevice={(id) => setSelectedDeviceId(id)}
       />
+
+      {showToast && latestUrgentAlert && (
+        <div
+          data-testid="urgent-alarm-toast"
+          className="fixed bottom-6 right-6 z-50 max-w-sm bg-rose-950/95 border border-rose-500/80 rounded-xl p-4 shadow-2xl text-xs flex items-start gap-3"
+        >
+          <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 shrink-0">
+            <Flame className="w-5 h-5 animate-pulse" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-rose-200">Urgent Fire Alarm Activated</p>
+            <p className="text-slate-300 mt-1 leading-relaxed">{latestUrgentAlert.message}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setSelectedDeviceId(latestUrgentAlert.deviceId);
+                  setDismissedAlertId(latestUrgentAlert.id);
+                }}
+                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white font-medium rounded transition-colors"
+              >
+                Inspect Gateway
+              </button>
+              <button
+                onClick={() => setDismissedAlertId(latestUrgentAlert.id)}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
